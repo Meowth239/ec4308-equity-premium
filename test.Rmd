@@ -95,7 +95,7 @@ lag_corr <- imap(
 
     # Correlations with x_{t-1} to x_{t-6}
     lagged_corrs <- map_dbl(c(1, 2, 3, 6, 12), function(k) {
-      lagged_x <- lag(col_data, k)
+      lagged_x <- dplyr::lag(col_data, k)
       abs(cor(lagged_x, y_data, use = "complete.obs"))
     })
 
