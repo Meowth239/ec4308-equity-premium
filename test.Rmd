@@ -3,8 +3,32 @@ title: "test"
 output: html_document
 ---
 
+
+
+### Read in the Data
+
 library(readxl)
 library(tidyverse)
 library(dplyr)
 df=read_excel("Data2024.xlsx", sheet=2)
-df>filter()
+
+
+df>filterna()
+
+### EDA so plot stuff like linear correlations
+
+
+### Doing the model 
+
+
+### Model
+
+
+### CV
+
+
+### Evaluation
+
+
+### Portfolio Strategy
+
