@@ -8,12 +8,15 @@ output: html_document
 
 
 ### Read in the Data
+<!-- install.packages("devtools") -->
+<!-- install_github(gabrielrvsc/HDeconometrics) -->
+
+library(HDeconometrics)
 library(conflicted)
 library(readxl)
 library(tidyverse)
 library(dplyr)
 library(ggplot2)
-library(HDeconometrics)
 library(tsibble)
 library(purrr)
 library(tseries)
