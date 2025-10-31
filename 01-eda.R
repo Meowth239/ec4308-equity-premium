@@ -60,9 +60,13 @@ plot.ts(infl, main = "infl", xlab = "Time")
 ggplot(data, aes(x=yyyymm, ep)) +
   geom_line()
 
+# lead y_t to ensure temporal consisteny, aka predict y_t w x_t-1
+data = data %>% mutate(ep=lead(ep), yyyymm = lead(yyyymm)) %>% na.omit()
+
+
 ### Splitting into training and test data
-train = data %>% slice(c(1:496))
-test = data %>% slice(c(497:743))
+train = data %>% slice(c(1:495))
+test = data %>% slice(c(496:743))
 
 ### EDA so plot stuff like linear correlations
 lag_corr <- imap(
@@ -71,11 +75,11 @@ lag_corr <- imap(
     col_data <- .x
     y_data <- train$ep
     
-    # Correlation with x_t
+    # Correlation with y_t and x_t-1
     corr <- abs(cor(col_data, y_data, use = "complete.obs"))
     
-    # Correlations with x_{t-1} to x_{t-6}
-    lagged_corrs <- map_dbl(c(1, 2, 3, 6, 12), function(k) {
+    # Correlations with x_{t-2} to x_{t-6}
+    lagged_corrs <- map_dbl(c(1, 2, 5, 11), function(k) {
       lagged_x <- dplyr::lag(col_data, k)
       abs(cor(lagged_x, y_data, use = "complete.obs"))
     })
@@ -83,28 +87,29 @@ lag_corr <- imap(
     tibble(
       column_name = .y,
       correlation_with_y = corr,
-      abs_cor_lag1 = lagged_corrs[1],
-      abs_cor_lag2 = lagged_corrs[2],
-      abs_cor_lag3 = lagged_corrs[3],
-      abs_cor_lag6 = lagged_corrs[4],
-      abs_cor_lag12 = lagged_corrs[5]
+      abs_cor_lag2 = lagged_corrs[1],
+      abs_cor_lag3 = lagged_corrs[2],
+      abs_cor_lag6 = lagged_corrs[3],
+      abs_cor_lag12 = lagged_corrs[4]
     )
   }
 ) %>% bind_rows()
 
-lm = lm(ep~.-yyyymm, data = data)
+lm = lm(ep~.-yyyymm, data = train)
 vif(lm)
 #Given the high VIF for d/p and e/p we consider including d/e instead
 
-data = data %>% mutate(`d/e` = `d/p`-`e/p`) %>% select(-`d/p`, -`e/p`)
+train = train %>% mutate(`d/e` = `d/p`-`e/p`) %>% select(-`d/p`, -`e/p`)
+test = test %>% mutate(`d/e` = `d/p`-`e/p`) %>% select(-`d/p`, -`e/p`)
 
-lm = lm(ep~.-yyyymm-`d/e`, data = data)
+lm = lm(ep~.-yyyymm-`d/e`, data = train)
 vif(lm)
 
-lm = lm(ep~.-yyyymm-ygap, data = data)
+lm = lm(ep~.-yyyymm-ygap, data = train)
 vif(lm)
 
 # remove ygap as correlation btw y and past lags of ygap is max 2% and max VIF is lower at around 6
 # Benefits of removing include stability of weights, making causal interpretation more reliable, lower variance of models and possibly better OOS performance and 
 
-data = data %>% select(-"ygap")
+train = train %>% select(-"ygap")
+test = test %>% select(-"ygap")
