@@ -261,4 +261,4 @@ model_results = add_results(model_results, xgb_test$pred, "XGB")
 #simple average of all past models
 ensemble_pred = rowSums(all_preds[, 4:ncol(all_preds)])/(ncol(all_preds)-3)
 all_preds = cbind(all_preds, ensemble_pred)
-model_results = add_results(model_results, xgb_test$pred, "ensemble")
+model_results = add_results(model_results, ensemble_pred, "ensemble")
