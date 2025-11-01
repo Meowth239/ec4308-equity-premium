@@ -51,7 +51,7 @@ runlm <- function(Y, indice) {
 
 lm.rolling.window <- function(Y, nprev, indice = 1) {
   
-  save.coef <- matrix(NA, nprev, ncol(Y))  # +1 for intercept
+  save.coef <- matrix(NA, nprev, ncol(Y))
   save.pred <- matrix(NA, nprev, 1)
   
   for(i in nprev:1) {
@@ -61,7 +61,7 @@ lm.rolling.window <- function(Y, nprev, indice = 1) {
     save.pred[(1 + nprev - i), ] <- lm.model$pred
   }
   
-  real <- Y[, indice]
+  real <- tail(Y[, indice], nprev)
   plot(real, type = "l")
   lines(c(rep(NA, length(real) - nprev), save.pred), col = "red")
   

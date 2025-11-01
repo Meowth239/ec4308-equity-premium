@@ -44,7 +44,7 @@ plot.ts(dy, main = "d/y")
 cor(dp[2:1848], dy, use = "complete.obs", method = "pearson")
 
 #final data
-data = df %>% select(1, 6, 10, 11, 13, 14, 16, 18: 20, 22, 24, 25, 34, 37, 38, 42:44, 46:49, 55) %>% mutate(ep = retx-Rfree) %>% select(c(-'retx', -'Rfree')) %>% na.omit() %>% dplyr::filter(yyyymm<202000)
+data = df %>% select(1, 6, 10, 11, 13, 14, 16, 18: 20, 22, 24, 25, 34, 37, 38, 42:44, 46:49, 55) %>% mutate(ep = retx-Rfree) %>% select(c(-'retx', -'Rfree')) %>% na.omit() %>% dplyr::filter(yyyymm<202000) 
 
 summary(data)
 
@@ -61,12 +61,12 @@ ggplot(data, aes(x=yyyymm, ep)) +
   geom_line()
 
 # lead y_t to ensure temporal consisteny, aka predict y_t w x_t-1
-data = data %>% mutate(ep=lead(ep), yyyymm = lead(yyyymm)) %>% na.omit()
+data = data %>% arrange(yyyymm) %>% mutate(ep=lead(ep, 2), yyyymm = lead(yyyymm, 2)) %>% na.omit()
 
 
 ### Splitting into training and test data
-train = data %>% slice(c(1:495))
-test = data %>% slice(c(496:743))
+train = data %>% dplyr::slice(c(1:494))
+test = data %>% dplyr::slice(c(495:742))
 
 ### EDA so plot stuff like linear correlations
 lag_corr <- imap(
@@ -101,6 +101,7 @@ vif(lm)
 
 train = train %>% mutate(`d/e` = `d/p`-`e/p`) %>% select(-`d/p`, -`e/p`)
 test = test %>% mutate(`d/e` = `d/p`-`e/p`) %>% select(-`d/p`, -`e/p`)
+data = data %>% mutate(`d/e` = `d/p`-`e/p`) %>% select(-`d/p`, -`e/p`)
 
 lm = lm(ep~.-yyyymm-`d/e`, data = train)
 vif(lm)
@@ -113,3 +114,4 @@ vif(lm)
 
 train = train %>% select(-"ygap")
 test = test %>% select(-"ygap")
+data = data %>% select(-"ygap")

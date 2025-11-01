@@ -26,143 +26,14 @@ library(tictoc)
 library(sandwich) 
 library(randomForest)
 library(hdm)
+library(glmnet)
+library(pls)
+library(xgboost)
 
 source("01-eda.R")
 
-### Doing the model 
-# Assessment metrics
-
-#RMSE
-RMSE <- function(pred, truth) sqrt(mean((truth - pred)^2))
-
-# Directional accuracy
-dir_acc <- function(pred, actual) mean(sign(pred) == sign(actual))
-
-# Trading simulation
-trade_sim <- function(pred, actual) cumprod(c(1, ifelse(pred > 0, 1+actual, 1-actual)))[-1]
-
-trade_sim_cost <- function(pred, actual, cost = 0.001) {
-  positions <- sign(pred)
-  trades <- c(TRUE, diff(positions) != 0)
-  returns <- ifelse(pred > 0, 1+actual, 1-actual) - ifelse(trades, cost, 0)
-  cumprod(c(1, returns))
-}
-
-# FOr reference , almost 80% of obs are positive so we are looking to beat that
-ntest = 247
-yy = test$ep
-yy_sign = mean(sign(yy))
-yy_sign = max(c(yy_sign, 1-yy_sign))
-
-# RW Baseline
-rw = embed(data$ep, 2)[, 2]
-rw = tail(rw, ntest)
-
-model_results = data.frame(
-                model= "RW",
-                RMSE=RMSE(rw, yy),
-                dir_acc=dir_acc(rw, yy),
-                return=trade_sim(rw, yy)[247],
-                return_w_cost=trade_sim_cost(rw, yy)[247]
-)
-
-# Rolling mean with 12 periods might change this later on
-rm = embed(data$ep, 13)[, 2:13]
-rm = rowSums(rm)/12
-rm = tail(rm, ntest)
-
-add_results <- function(df, pred, name){
-                df <- rbind(df, data.frame(
-                  model= name,
-                  RMSE=RMSE(pred, yy),
-                  dir_acc=dir_acc(pred, yy),
-                  return=trade_sim(pred, yy)[247],
-                  return_w_cost=trade_sim_cost(pred, yy)[247]
-))
-}
-
-model_results = add_results(model_results, rm, "Rolling Mean - 12 Period")
-
-
-# Starting of with best subset selection, we select the model with the lowest AIC
-tic()
-bssel = regsubsets(ep~.-yyyymm, data = train, nvmax = 19, method = "exhaustive")
-toc()
-
-sumbss = summary(bssel)
-sumbss
-
-
-# by BIC we see that the model w 5 regressors has the smallest BIC error, corpr, infl, svar, skvw and avgcor
-# the model that is the best based on BIC
-plot(bssel, scale = "bic")
-
-# We use full model to estimate var as 495/21 is ~23 so not too bad
-ntrain = 495
-varest=sumbss$rss[19]/(ntrain-20) #estimate error variance of the model with k=21
-
-
-#construct the IC with this estimate (note seq() used to generate a sequence from 1 to 11 regressors to plug into the formula):
-BICL = sumbss$rss/ntrain + log(ntrain)*varest*((seq(1,19,1))/ntrain)
-AICL = sumbss$rss/ntrain + 2*varest*((seq(1,19,1))/ntrain)
-
-kbicl=which.min(BICL) #BIC choice
-
-kaicl=which.min(AICL)  #AIC choice (AIC proportional to Cp and so ranking is the same)
-
-
-#Compute IC for the models using sigma0 estimate:
-BIC0 = sumbss$rss/ntrain + log(ntrain)*(sumbss$rss[kbicl]/(ntrain-kbicl-1))*((seq(1,19,1))/ntrain)
-AIC0 = sumbss$rss/ntrain + 2*(sumbss$rss[kaicl]/(ntrain-kaicl-1))*((seq(1,19,1))/ntrain)
-
-#Select best models
-k0bic = which.min(BIC0)
-k0aic = which.min(AIC0)
-
-#Obtain IC estimates with sigma 1 estimate:
-BIC1 = sumbss$rss/ntrain + log(ntrain)*(sumbss$rss[k0bic]/(ntrain-k0bic-1))*((seq(1,19,1))/ntrain)
-AIC1 = sumbss$rss/ntrain + 2*(sumbss$rss[k0aic]/(ntrain-k0aic-1))*((seq(1,19,1))/ntrain)
-
-k1bic = which.min(BIC1)
-k1aic = which.min(AIC1)
-
-# As we expect, due to the increase in penalisation for BIC where we multiply complexity by log(k), BIC favours the simpler model corpr, infl, svar, skvw and avgcor
-# While AIC favours a more complex model of 10 predictors, corpr, b/m, infl, svar, ogap, wtexas, skvw dtoy, dtoat, d/e
-
-test.mat = model.matrix(ep~.-yyyymm, data = data)
-
-temp.coef = names(coef(bssel, id = k1bic))
-lm_BIC_data = test.mat[, temp.coef]
-
-temp.coef = names(coef(bssel, id = k1aic))
-lm_AIC_data = test.mat[, temp.coef]
-
-lm_AIC_data = cbind(data$ep, lm_AIC_data)
-lm_BIC_data = cbind(data$ep, lm_BIC_data)
-
-source("custom-func-lm.R")
-
-lm_AIC = lm.rolling.window(lm_AIC_data, ntest, 1)
-lm_BIC = lm.rolling.window(lm_BIC_data, ntest, 1)
-
-model_results = add_results(model_results, lm_AIC$pred, "Subset Selection - AIC")
-model_results = add_results(model_results, lm_BIC$pred, "Subset Selection - BIC")
-
-
-# Looking at just the test set without doing Rolling Window prediction, we see that MSE BIC is .043295 and MSE AIC is .0465
-
-
 ### Model
+source("02-predicting 1-step.R")
 
 
-### CV
-MSE <- function(pred, truth){ #start and end body of the function by { } - same as a loop 
-  return(mean((truth - pred)^2)) #end function with a return(output) statement. Here we can go straight to return because the object of interest is a simple function of inputs
-}
-
-
-### Evaluation
-
-
-### Portfolio Strategy
 
