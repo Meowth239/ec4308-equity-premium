@@ -1,6 +1,8 @@
 ### Doing the model 
 # Assessment metrics
 
+set.seed(4308)
+
 #RMSE
 RMSE <- function(pred, truth) sqrt(mean((truth - pred)^2))
 
@@ -25,13 +27,17 @@ yy = test$ep
 yy_sign = mean(sign(yy)>0)
 yy_sign = max(c(yy_sign, 1-yy_sign))
 
+squared_loss <- function(pred) {
+  (yy-pred)^2
+}
+
 # RW Baseline
 rw = embed(data$ep, 2)[, 2]
 rw = tail(rw, ntest)
 
 #Plotting
-plot(yy,type = "l")
-lines(rw, col = "red")
+yy.ts = ts(cbind(yy, rw), start = c(1999, 6), end = c(2019, 12), freq = 12)
+plot.ts(yy.ts)
 
 all_preds = data.frame(
   actual = yy,
@@ -65,6 +71,9 @@ add_results <- function(df, pred, name){
     return_sum = trade_sim_sum(pred, yy)[248]    
   ))
 }
+
+#squared loss for dm test, we mainly use rm as the benchmark
+squared_loss_df = data.frame(rm = squared_loss(rm))
 
 all_preds = cbind(all_preds, rm)
 model_results = add_results(model_results, rm, "Historic Mean")
@@ -137,11 +146,14 @@ lm_BIC$coef
 
 all_preds = cbind(all_preds, lm_AIC$pred)
 all_preds = cbind(all_preds, lm_BIC$pred)
+squared_loss_df = cbind(squared_loss_df, squared_loss(lm_AIC$pred))
+squared_loss_df = cbind(squared_loss_df, squared_loss(lm_BIC$pred))
 model_results = add_results(model_results, lm_AIC$pred, "Subset Selection - AIC")
 model_results = add_results(model_results, lm_BIC$pred, "Subset Selection - BIC")
 
 source("custom-func-lasso.R")
 
+#for lasso
 alpha = 1
 
 test.mat = scale(model.matrix(ep~.-yyyymm, data = data)[, 2:20])
@@ -157,6 +169,7 @@ lasso_CV = lasso.cv.lambda(lasso_cv_data, ntest, indice = 1, alpha = alpha,
 lasso_test = lasso.rolling.window(lasso_data, ntest, indice = 1, lasso_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
 all_preds = cbind(all_preds, lasso_test$pred)
+squared_loss_df = cbind(squared_loss_df, squared_loss(lasso_test$pred))
 model_results = add_results(model_results, lasso_test$pred, "Lasso")
 
 #for ridge
@@ -171,6 +184,7 @@ ridge_CV = lasso.cv.lambda(lasso_cv_data, ntest, indice = 1, alpha = alpha, #jus
 ridge_test = lasso.rolling.window(lasso_data, ntest, indice = 1, ridge_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
 all_preds = cbind(all_preds, ridge_test$pred)
+squared_loss_df = cbind(squared_loss_df, squared_loss(ridge_test$pred))
 model_results = add_results(model_results, ridge_test$pred, "Ridge")
 
 
@@ -186,6 +200,7 @@ EN_CV = lasso.cv.lambda(lasso_cv_data, ntest, indice = 1, alpha = alpha, #just c
 EN_test = lasso.rolling.window(lasso_data, ntest, indice = 1, ridge_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
 all_preds = cbind(all_preds, EN_test$pred)
+squared_loss_df = cbind(squared_loss_df, squared_loss(EN_test$pred))
 model_results = add_results(model_results, EN_test$pred, "EN")
 
 # due to the biasedness of LASSO, we try post-Lasso
@@ -203,6 +218,7 @@ plasso_CV = plasso.cv.lambda(lasso_cv_data, ntest, indice = 1, alpha = alpha,
 plasso_test = plasso.rolling.window(lasso_cv_data, ntest, indice = 1, lasso_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
 all_preds = cbind(all_preds, plasso_test$pred)
+squared_loss_df = cbind(squared_loss_df, squared_loss(plasso_test$pred))
 model_results = add_results(model_results, plasso_test$pred, "Post Lasso")
 
 # PCR
@@ -220,6 +236,7 @@ final_loadings = pcr_test$loadings[ntest, 1:19, 1]
 barplot(abs(final_loadings/sum(final_loadings)))
 
 all_preds = cbind(all_preds, pcr_test$pred)
+squared_loss_df = cbind(squared_loss_df, squared_loss(pcr_test$pred))
 model_results = add_results(model_results, pcr_test$pred, "PCR")
 
 # PLS
@@ -231,34 +248,67 @@ pls_cv <- pls.cv.ncomp(lasso_cv_data, nprev = ntest, indice = 1, date_col = data
 pls_test <- pls.rolling.window(lasso_cv_data, nprev = ntest, indice = 1, ncomp = pls_cv$best_ncomp, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
 all_preds = cbind(all_preds, pls_test$pred)
+squared_loss_df = cbind(squared_loss_df, squared_loss(pls_test$pred))
 model_results = add_results(model_results, pls_test$pred, "PLS")
 
 # RF takes a long time
 rf_data = model.matrix(ep~.-yyyymm, data = data)[, 2:20] # Dont need to scale
+rf_cv_data = rf_data[1:(nrow(rf_data)-ntest), ]
 source("custom-func-rf.R")
 
-rf_cv <- rf.cv.ntree(rf_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
+rf_cv <- rf.cv.ntree(rf_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
 
 #prediction
 rf_test = rf.rolling.window(rf_data, nprev = ntest, indice = 1, ntree = rf_cv$best_ntree, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
 all_preds = cbind(all_preds, rf_test$pred)
+squared_loss_df = cbind(squared_loss_df, squared_loss(rf_test$pred))
 model_results = add_results(model_results, rf_test$pred, "RF")
 
 
 # XGB
 source("custom-func-xgb.R")
 
-xgb_cv <- xgb.cv.nrounds(rf_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
+xgb_cv <- xgb.cv.nrounds(rf_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
 
 #prediction
 xgb_test = xgb.rolling.window(rf_data, nprev = ntest, indice = 1, nrounds = xgb_cv$best_nrounds, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
 all_preds = cbind(all_preds, xgb_test$pred)
+squared_loss_df = cbind(squared_loss_df, squared_loss(xgb_test$pred))
 model_results = add_results(model_results, xgb_test$pred, "XGB")
 
 # ensemble
 #simple average of all past models
 ensemble_pred = rowSums(all_preds[, 4:ncol(all_preds)])/(ncol(all_preds)-3)
 all_preds = cbind(all_preds, ensemble_pred)
+squared_loss_df = cbind(squared_loss_df, squared_loss(ensemble_pred))
 model_results = add_results(model_results, ensemble_pred, "ensemble")
+
+# hybrid learning, completely experimental
+source("custom-func-hybrid.R")
+hybrid_cv_results <- hybrid.cv.params(rf_cv_data, nprev = 247, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
+
+hybrid_test = hybrid.rolling.window(rf_data, nprev = 247, indice = 1, lambda = hybrid_cv_results$best_lambda, 
+                                    nrounds = hybrid_cv_results$best_nrounds,, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
+
+all_preds = cbind(all_preds, hybrid_test$pred)
+squared_loss_df = cbind(squared_loss_df, squared_loss(hybrid_test$pred))
+model_results = add_results(model_results, hybrid_test$pred, "Hybrid")
+
+
+for (i in 2:14) {
+  temp.ts = ts(yy - all_preds[, i], start = c(1999, 6), end = c(2019, 12), freq = 12)
+  plot.ts(temp.ts, ylab = "Actual - Predicted", main = colnames(all_preds)[i])  
+}
+
+loss_diff = squared_loss_df[, 1] - squared_loss_df[, -1]
+dm_test = c()
+for (i in 1:12) {
+  temp.ts = ts(loss_diff[, i], start = c(1999, 6), end = c(2019, 12), freq = 12)
+  plot.ts(temp.ts, ylab = "Loss Differential", main = colnames(loss_diff)[i])
+  dm = lm(loss_diff[, i]~1)
+  acf(dm$residuals)
+  dm_test = c(dm_test, dm$coefficients/sqrt(NeweyWest(dm,lag=6))) #using general rule of thumb of P^1/3 which is roughly 6
+}
+model_results = cbind(model_results, dm_test = c(NA, NA, dm_test))

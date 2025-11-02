@@ -61,12 +61,12 @@ ggplot(data, aes(x=yyyymm, ep)) +
   geom_line()
 
 # lead y_t to ensure temporal consisteny, aka predict y_t w x_t-1
-data = data %>% arrange(yyyymm) %>% mutate(ep=lead(ep, 2), yyyymm = lead(yyyymm, 2)) %>% na.omit()
+data = data %>% arrange(yyyymm) %>% mutate(ep=lead(ep), yyyymm = lead(yyyymm)) %>% na.omit()
 
 
 ### Splitting into training and test data
-train = data %>% dplyr::slice(c(1:494))
-test = data %>% dplyr::slice(c(495:742))
+train = data %>% dplyr::slice(c(1:(nrow(data)-247)))
+test = data %>% dplyr::slice(c((nrow(data)-247+1):nrow(data))) #247 test data
 
 ### EDA so plot stuff like linear correlations
 lag_corr <- imap(
