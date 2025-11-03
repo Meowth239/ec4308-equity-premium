@@ -29,20 +29,39 @@ library(hdm)
 library(glmnet)
 library(pls)
 library(xgboost)
+library(reshape2)
 
 set.seed(4308)
 
 source("01-eda.R")
 
 ### Model for 1 step
+ntest = 247
 source("02-predicting 1-step.R")
+
+#Further Analysis on the excessive Profitability
+source("plotting.R")
+plot_signal_timing(yy, lm_AIC$pred[, 1])
+plot_signal_timing(yy, lasso_test$pred[, 1])
+plot_signal_timing(yy, EN_test$pred[, 1])
+
+<!-- dev.off() -->
+
 
 results_1step = model_results
 
+#testing for different section of test data cos got oo much positives
+ntest =  120
+d = data
+data = data[1:(nrow(data)-247),, ]
+source("02-predicting 1-step.R")
+
+results_1step_alt = model_results
 #model for 2 step
 data = data %>% arrange(yyyymm) %>% mutate(ep=lead(ep), yyyymm = lead(yyyymm)) %>% na.omit()
 
 #make sure to check for AIC and BIC for subset selection to see if the iterative process is the same
+ntest = 247
 source("02-predicting 1-step.R")
 
 results_2step = model_results

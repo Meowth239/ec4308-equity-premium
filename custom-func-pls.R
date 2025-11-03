@@ -128,7 +128,7 @@ pls.rolling.window <- function(Y, nprev, indice = 1, ncomp, date_col = NULL) {
     # Plot with dates on x-axis
     plot(dates, real_test, type = "l", main = paste("PLS: ncomp =", ncomp),
          ylab = "Value", xlab = "Date", xaxt = "n")
-    lines(dates, save.pred, col = "darkgreen")
+    lines(dates, save.pred, col = "red")
     
     # Show dates at regular intervals
     n_labels <- 10  # Adjust this number
@@ -139,11 +139,11 @@ pls.rolling.window <- function(Y, nprev, indice = 1, ncomp, date_col = NULL) {
     # Plot without dates (original behaviour)
     plot(real_test, type = "l", main = paste("PLS: ncomp =", ncomp),
          ylab = "Value", xlab = "Time Period")
-    lines(save.pred, col = "darkgreen")
+    lines(save.pred, col = "red")
   }
   
   legend("topright", legend = c("Actual", "Predicted"), 
-         col = c("black", "darkgreen"), lty = 1)
+         col = c("black", "red"), lty = 1)
   
   # Compute errors
   rmse <- sqrt(mean((real_test - save.pred)^2))
@@ -230,14 +230,14 @@ pls.cv.ncomp <- function(Y, nprev, indice = 1,
   plot(cv_results$ncomp, cv_results$rmse, type = "b", 
        xlab = "Number of Components", ylab = "RMSE", 
        main = "CV: RMSE vs ncomp (PLS)")
-  abline(v = best_ncomp, col = "darkgreen", lty = 2)
-  points(best_ncomp, cv_results$rmse[best_idx], col = "darkgreen", pch = 19, cex = 1.5)
+  abline(v = best_ncomp, col = "red", lty = 2)
+  points(best_ncomp, cv_results$rmse[best_idx], col = "red", pch = 19, cex = 1.5)
   
   plot(cv_results$ncomp, cv_results$mae, type = "b",
        xlab = "Number of Components", ylab = "MAE", 
        main = "CV: MAE vs ncomp (PLS)")
-  abline(v = best_ncomp, col = "darkgreen", lty = 2)
-  points(best_ncomp, cv_results$mae[best_idx], col = "darkgreen", pch = 19, cex = 1.5)
+  abline(v = best_ncomp, col = "red", lty = 2)
+  points(best_ncomp, cv_results$mae[best_idx], col = "red", pch = 19, cex = 1.5)
   par(mfrow = c(1, 1))
   
   return(list(

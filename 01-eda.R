@@ -115,3 +115,11 @@ vif(lm)
 train = train %>% select(-"ygap")
 test = test %>% select(-"ygap")
 data = data %>% select(-"ygap")
+
+#eda on ep
+mean_ep = mean(data$ep)
+std_ep = sqrt(var(data$ep))
+
+mean_ep
+std_ep
+#serves as a point of reference for RMSE, sqrt is about .04 so 4%

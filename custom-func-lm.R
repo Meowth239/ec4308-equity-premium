@@ -58,6 +58,7 @@ lm.rolling.window <- function(Y, nprev, indice = 1) {
     Y.window <- Y[(1 + nprev - i):(1+nrow(Y) - i), ]
     lm.model <- runlm(Y.window, indice)
     save.coef[(1 + nprev - i), ] <- coef(lm.model$model)
+    coef(lm.model$model)
     save.pred[(1 + nprev - i), ] <- lm.model$pred
   }
   

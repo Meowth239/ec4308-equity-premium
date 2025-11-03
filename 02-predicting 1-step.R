@@ -12,7 +12,7 @@ dir_acc <- function(pred, actual) mean(sign(pred) == sign(actual))
 # Trading simulation
 trade_sim <- function(pred, actual) cumprod(c(1, ifelse(pred > 0, 1+actual, 1-actual)))
 
-trade_sim_sum <- function(pred, actual) cumsum(c(1, ifelse(pred > 0, actual, -actual)))
+trade_sim_sum <- function(pred, actual) cumsum(ifelse(pred > 0, actual, -actual))
 
 trade_sim_cost <- function(pred, actual, cost = 0.001) {
   positions <- sign(pred)
@@ -21,11 +21,11 @@ trade_sim_cost <- function(pred, actual, cost = 0.001) {
   cumprod(c(1, returns))
 }
 
-# FOr reference , almost 60% of obs are positive so we are looking to beat that
-ntest = 247
-yy = test$ep
+# For reference , almost 60% of obs are positive so we are looking to beat that
+yy = data$ep[(nrow(data)-ntest+1):nrow(data)]
 yy_sign = mean(sign(yy)>0)
 yy_sign = max(c(yy_sign, 1-yy_sign))
+
 
 squared_loss <- function(pred) {
   (yy-pred)^2
@@ -48,9 +48,9 @@ model_results = data.frame(
   model= "RW",
   RMSE=RMSE(rw, yy),
   dir_acc=dir_acc(rw, yy),
-  return=trade_sim(rw, yy)[248],
-  return_w_cost=trade_sim_cost(rw, yy)[248],
-  return_sum = trade_sim_sum(rw, yy)[248]
+  return=trade_sim(rw, yy)[ntest+1],
+  return_w_cost=trade_sim_cost(rw, yy)[ntest+1],
+  return_sum = trade_sim_sum(rw, yy)[ntest]
 )
 
 #historical mean
@@ -58,7 +58,8 @@ rm = cumsum(data$ep)/1:nrow(data)
 rm = tail(rm, ntest)
 
 #Plotting
-plot(yy,type = "l")
+plot(yy,type = "l", main = "Actual Vs Historical Mean", xaxt = 'n')
+axis(side = 1, at=c(8, 68, 128, 188, 247), labels = c(2000, 2005, 2010, 2015, 2020))
 lines(rm, col = "red")
 
 add_results <- function(df, pred, name){
@@ -66,9 +67,9 @@ add_results <- function(df, pred, name){
     model= name,
     RMSE=RMSE(pred, yy),
     dir_acc=dir_acc(pred, yy),
-    return=trade_sim(pred, yy)[248],
-    return_w_cost=trade_sim_cost(pred, yy)[248],
-    return_sum = trade_sim_sum(pred, yy)[248]    
+    return=trade_sim(pred, yy)[ntest+1],
+    return_w_cost=trade_sim_cost(pred, yy)[ntest+1],
+    return_sum = trade_sim_sum(pred, yy)[ntest]    
   ))
 }
 
@@ -81,7 +82,7 @@ model_results = add_results(model_results, rm, "Historic Mean")
 
 # Starting of with best subset selection, we select the model with the lowest AIC
 tic()
-bssel = regsubsets(ep~.-yyyymm, data = train, nvmax = 19, method = "exhaustive")
+bssel = regsubsets(ep~.-yyyymm, data = data[1:(nrow(data)-ntest), ], nvmax = 19, method = "exhaustive")
 toc()
 
 sumbss = summary(bssel)
@@ -93,7 +94,7 @@ sumbss
 plot(bssel, scale = "bic")
 
 # We use full model to estimate var as 495/21 is ~23 so not too bad
-ntrain = 495
+ntrain = nrow(data)-247
 varest=sumbss$rss[19]/(ntrain-20) #estimate error variance of the model with k=21
 
 
@@ -127,22 +128,28 @@ k1aic = which.min(AIC1)
 test.mat = model.matrix(ep~.-yyyymm, data = data)
 
 temp.coef = names(coef(bssel, id = k1bic))
+print("Variables chosen by BIC")
+temp.coef
 lm_BIC_data = test.mat[, temp.coef]
 
 temp.coef = names(coef(bssel, id = k1aic))
+print("Variables chosen by AIC")
+temp.coef
 lm_AIC_data = test.mat[, temp.coef]
 
 lm_AIC_data = cbind(data$ep, lm_AIC_data)
 lm_BIC_data = cbind(data$ep, lm_BIC_data)
+
+# As expected BIC is much simpler but it doesnt do much better
 
 source("custom-func-lm.R")
 
 lm_AIC = lm.rolling.window(lm_AIC_data, ntest, 1)
 lm_BIC = lm.rolling.window(lm_BIC_data, ntest, 1)
 
+#coefficients
 lm_AIC$coef
 lm_BIC$coef
-
 
 all_preds = cbind(all_preds, lm_AIC$pred)
 all_preds = cbind(all_preds, lm_BIC$pred)
@@ -150,6 +157,12 @@ squared_loss_df = cbind(squared_loss_df, squared_loss(lm_AIC$pred))
 squared_loss_df = cbind(squared_loss_df, squared_loss(lm_BIC$pred))
 model_results = add_results(model_results, lm_AIC$pred, "Subset Selection - AIC")
 model_results = add_results(model_results, lm_BIC$pred, "Subset Selection - BIC")
+
+#Plotting
+plot(yy,type = "l", main = "Actual Vs Subset Selection  by AIC", xaxt = 'n')
+axis(side = 1, at=c(8, 68, 128, 188, 247), labels = c(2000, 2005, 2010, 2015, 2020))
+lines(sign(lm_AIC$pred)*yy, col = "red")
+lines(sign(rm)*yy, col = "green")
 
 source("custom-func-lasso.R")
 
@@ -168,7 +181,33 @@ lasso_CV = lasso.cv.lambda(lasso_cv_data, ntest, indice = 1, alpha = alpha,
 #prediction
 lasso_test = lasso.rolling.window(lasso_data, ntest, indice = 1, lasso_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
-all_preds = cbind(all_preds, lasso_test$pred)
+# lasso coefs for each iteration
+lasso_test$coef
+
+lasso_test$observation <- 1:nrow(lasso_test$coef)
+
+# Reshape data to long format for ggplot2
+df_long <- melt(lasso_test$coef, id.vars = "observation", 
+                variable.name = "variable", 
+                value.name = "coefficient")
+
+# Calculate symmetric limits around zero
+max_abs <- max(abs(df_long$coefficient), na.rm = TRUE)
+limits <- c(-max_abs, max_abs)
+
+# Create heatmap
+ggplot(df_long, aes(x = Var1, y = Var2, fill = coefficient)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", mid = "grey", high = "red", 
+                       midpoint = 0, limits = limits,
+                       name = "Coefficient") +
+  theme_minimal() +
+  labs(x = "Observation", y = "Variable", 
+       title = "Lasso Coefficients Across Rolling Windows") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+all_preds = cbind(all_prVar1all_preds = cbind(all_preds, lasso_test$pred))
 squared_loss_df = cbind(squared_loss_df, squared_loss(lasso_test$pred))
 model_results = add_results(model_results, lasso_test$pred, "Lasso")
 
@@ -182,6 +221,9 @@ ridge_CV = lasso.cv.lambda(lasso_cv_data, ntest, indice = 1, alpha = alpha, #jus
 
 #prediction
 ridge_test = lasso.rolling.window(lasso_data, ntest, indice = 1, ridge_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
+
+#ridge coef
+ridge_test$coef
 
 all_preds = cbind(all_preds, ridge_test$pred)
 squared_loss_df = cbind(squared_loss_df, squared_loss(ridge_test$pred))
@@ -199,6 +241,9 @@ EN_CV = lasso.cv.lambda(lasso_cv_data, ntest, indice = 1, alpha = alpha, #just c
 #prediction
 EN_test = lasso.rolling.window(lasso_data, ntest, indice = 1, ridge_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
+#EN coef
+EN_test$coef
+
 all_preds = cbind(all_preds, EN_test$pred)
 squared_loss_df = cbind(squared_loss_df, squared_loss(EN_test$pred))
 model_results = add_results(model_results, EN_test$pred, "EN")
@@ -215,7 +260,10 @@ plasso_CV = plasso.cv.lambda(lasso_cv_data, ntest, indice = 1, alpha = alpha,
 #We use RMSE as main metric in determining for CV and from the graph can see that best lambda is 0.01930698
 
 #prediction
-plasso_test = plasso.rolling.window(lasso_cv_data, ntest, indice = 1, lasso_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
+plasso_test = plasso.rolling.window(lasso_data, ntest, indice = 1, lasso_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
+
+# 
+plasso_test$selected_vars
 
 all_preds = cbind(all_preds, plasso_test$pred)
 squared_loss_df = cbind(squared_loss_df, squared_loss(plasso_test$pred))
@@ -230,10 +278,37 @@ pcr_cv <- pcr.cv.ncomp(lasso_cv_data, nprev = ntest, indice = 1, date_col = data
 #We use RMSE as main metric in determining for CV and from the graph can see that best lambda is 0.01930698
 
 #prediction
-pcr_test <- pcr.rolling.window(lasso_cv_data, nprev = ntest, indice = 1, ncomp = pcr_cv$best_ncomp, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
+pcr_test <- pcr.rolling.window(lasso_data, nprev = ntest, indice = 1, ncomp = pcr_cv$best_ncomp, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
+
+pcr_test$ncomp_used
 
 final_loadings = pcr_test$loadings[ntest, 1:19, 1]
 barplot(abs(final_loadings/sum(final_loadings)))
+
+loadings_247 <- pcr_test$loadings[ntest, , ]
+
+# Convert to dataframe
+# Rows = variables, Columns = PCs
+loadings_df <- as.data.frame(loadings_247)
+
+# Add variable names
+loadings_df$variable <- rownames(loadings_df)
+# If no rownames, use:
+# loadings_df$variable <- paste0("Var", 1:19)
+
+# Reshape to long format
+loadings_long <- melt(loadings_df, id.vars = "variable",
+                      variable.name = "PC",
+                      value.name = "loading")
+
+# Create faceted bar chart
+ggplot(loadings_long, aes(x = variable, y = loading)) +
+  geom_col(fill = "steelblue") +
+  facet_wrap(~ PC, scales = "free_y") +
+  theme_minimal() +
+  labs(x = "Variable", y = "Loading",
+       title = cat("PC Loadings at Observation ", ntest)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 all_preds = cbind(all_preds, pcr_test$pred)
 squared_loss_df = cbind(squared_loss_df, squared_loss(pcr_test$pred))
@@ -245,7 +320,9 @@ source("custom-func-pls.R")
 pls_cv <- pls.cv.ncomp(lasso_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
 
 #prediction
-pls_test <- pls.rolling.window(lasso_cv_data, nprev = ntest, indice = 1, ncomp = pls_cv$best_ncomp, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
+pls_test <- pls.rolling.window(lasso_data, nprev = ntest, indice = 1, ncomp = pls_cv$best_ncomp, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
+
+pls_test$ncomp_used
 
 all_preds = cbind(all_preds, pls_test$pred)
 squared_loss_df = cbind(squared_loss_df, squared_loss(pls_test$pred))
@@ -256,10 +333,10 @@ rf_data = model.matrix(ep~.-yyyymm, data = data)[, 2:20] # Dont need to scale
 rf_cv_data = rf_data[1:(nrow(rf_data)-ntest), ]
 source("custom-func-rf.R")
 
-rf_cv <- rf.cv.ntree(rf_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
+rf_cv <- rf.cv.ntree(lasso_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
 
 #prediction
-rf_test = rf.rolling.window(rf_data, nprev = ntest, indice = 1, ntree = rf_cv$best_ntree, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
+rf_test = rf.rolling.window(lasso_data, nprev = ntest, indice = 1, ntree = rf_cv$best_ntree, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
 all_preds = cbind(all_preds, rf_test$pred)
 squared_loss_df = cbind(squared_loss_df, squared_loss(rf_test$pred))
@@ -269,10 +346,10 @@ model_results = add_results(model_results, rf_test$pred, "RF")
 # XGB
 source("custom-func-xgb.R")
 
-xgb_cv <- xgb.cv.nrounds(rf_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
+xgb_cv <- xgb.cv.nrounds(lasso_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
 
 #prediction
-xgb_test = xgb.rolling.window(rf_data, nprev = ntest, indice = 1, nrounds = xgb_cv$best_nrounds, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
+xgb_test = xgb.rolling.window(lasso_data, nprev = ntest, indice = 1, nrounds = xgb_cv$best_nrounds, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
 all_preds = cbind(all_preds, xgb_test$pred)
 squared_loss_df = cbind(squared_loss_df, squared_loss(xgb_test$pred))
@@ -287,9 +364,9 @@ model_results = add_results(model_results, ensemble_pred, "ensemble")
 
 # hybrid learning, completely experimental
 source("custom-func-hybrid.R")
-hybrid_cv_results <- hybrid.cv.params(rf_cv_data, nprev = 247, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
+hybrid_cv_results <- hybrid.cv.params(rf_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
 
-hybrid_test = hybrid.rolling.window(rf_data, nprev = 247, indice = 1, lambda = hybrid_cv_results$best_lambda, 
+hybrid_test = hybrid.rolling.window(rf_data, nprev = ntest, indice = 1, lambda = hybrid_cv_results$best_lambda, 
                                     nrounds = hybrid_cv_results$best_nrounds,, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
 all_preds = cbind(all_preds, hybrid_test$pred)
@@ -312,3 +389,5 @@ for (i in 1:12) {
   dm_test = c(dm_test, dm$coefficients/sqrt(NeweyWest(dm,lag=6))) #using general rule of thumb of P^1/3 which is roughly 6
 }
 model_results = cbind(model_results, dm_test = c(NA, NA, dm_test))
+
+
