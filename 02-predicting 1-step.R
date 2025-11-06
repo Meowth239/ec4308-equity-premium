@@ -21,6 +21,18 @@ trade_sim_cost <- function(pred, actual, cost = 0.001) {
   cumprod(c(1, returns))
 }
 
+HM_test <- function(predicted, actual) {
+  threshold = mean(actual)
+  
+  #dummy
+  predicted_dummy <- as.numeric(predicted >= threshold)
+  actual_dummy <- as.numeric(actual >= threshold) 
+  
+  model <- lm(predicted_dummy ~ 1+actual_dummy)
+  
+  return(summary(model)$coefficients["actual_dummy", "t value"])
+}
+
 # For reference , almost 60% of obs are positive so we are looking to beat that
 yy = data$ep[(nrow(data)-ntest+1):nrow(data)]
 yy_sign = mean(sign(yy)>0)
@@ -31,28 +43,6 @@ squared_loss <- function(pred) {
   (yy-pred)^2
 }
 
-# RW Baseline
-rw = embed(data$ep, 2)[, 2]
-rw = tail(rw, ntest)
-
-#Plotting
-yy.ts = ts(cbind(yy, rw), start = c(1999, 6), end = c(2019, 12), freq = 12)
-plot.ts(yy.ts)
-
-all_preds = data.frame(
-  actual = yy,
-  rw = rw
-)
-
-model_results = data.frame(
-  model= "RW",
-  RMSE=RMSE(rw, yy),
-  dir_acc=dir_acc(rw, yy),
-  return=trade_sim(rw, yy)[ntest+1],
-  return_w_cost=trade_sim_cost(rw, yy)[ntest+1],
-  return_sum = trade_sim_sum(rw, yy)[ntest]
-)
-
 #historical mean
 rm = cumsum(data$ep)/1:nrow(data)
 rm = tail(rm, ntest)
@@ -61,6 +51,22 @@ rm = tail(rm, ntest)
 plot(yy,type = "l", main = "Actual Vs Historical Mean", xaxt = 'n')
 axis(side = 1, at=c(8, 68, 128, 188, 247), labels = c(2000, 2005, 2010, 2015, 2020))
 lines(rm, col = "red")
+mean(yy)
+
+all_preds = data.frame(
+  actual = yy,
+  rm = rm
+)
+
+model_results = data.frame(
+  model= "Historic Mean",
+  RMSE=RMSE(rm, yy),
+  dir_acc=dir_acc(rm, yy),
+  return=trade_sim(rm, yy)[ntest+1],
+  return_w_cost=trade_sim_cost(rm, yy)[ntest+1],
+  return_sum = trade_sim_sum(rm, yy)[ntest],
+  HM_test = HM_test(rm, yy)
+)
 
 add_results <- function(df, pred, name){
   df <- rbind(df, data.frame(
@@ -69,15 +75,13 @@ add_results <- function(df, pred, name){
     dir_acc=dir_acc(pred, yy),
     return=trade_sim(pred, yy)[ntest+1],
     return_w_cost=trade_sim_cost(pred, yy)[ntest+1],
-    return_sum = trade_sim_sum(pred, yy)[ntest]    
+    return_sum = trade_sim_sum(pred, yy)[ntest],
+    HM_test = HM_test(pred, yy)
   ))
 }
 
 #squared loss for dm test, we mainly use rm as the benchmark
 squared_loss_df = data.frame(rm = squared_loss(rm))
-
-all_preds = cbind(all_preds, rm)
-model_results = add_results(model_results, rm, "Historic Mean")
 
 
 # Starting of with best subset selection, we select the model with the lowest AIC
@@ -355,12 +359,7 @@ all_preds = cbind(all_preds, xgb_test$pred)
 squared_loss_df = cbind(squared_loss_df, squared_loss(xgb_test$pred))
 model_results = add_results(model_results, xgb_test$pred, "XGB")
 
-# ensemble
-#simple average of all past models
-ensemble_pred = rowSums(all_preds[, 4:ncol(all_preds)])/(ncol(all_preds)-3)
-all_preds = cbind(all_preds, ensemble_pred)
-squared_loss_df = cbind(squared_loss_df, squared_loss(ensemble_pred))
-model_results = add_results(model_results, ensemble_pred, "ensemble")
+
 
 # hybrid learning, completely experimental
 source("custom-func-hybrid.R")
@@ -373,8 +372,15 @@ all_preds = cbind(all_preds, hybrid_test$pred)
 squared_loss_df = cbind(squared_loss_df, squared_loss(hybrid_test$pred))
 model_results = add_results(model_results, hybrid_test$pred, "Hybrid")
 
+# ensemble
+#simple average of all past models
+ensemble_pred = rowSums(all_preds[, 4:ncol(all_preds)])/(ncol(all_preds)-3)
+all_preds = cbind(all_preds, ensemble_pred)
+squared_loss_df = cbind(squared_loss_df, squared_loss(ensemble_pred))
+model_results = add_results(model_results, ensemble_pred, "ensemble")
 
-for (i in 2:14) {
+
+for (i in 1:14) {
   temp.ts = ts(yy - all_preds[, i], start = c(1999, 6), end = c(2019, 12), freq = 12)
   plot.ts(temp.ts, ylab = "Actual - Predicted", main = colnames(all_preds)[i])  
 }

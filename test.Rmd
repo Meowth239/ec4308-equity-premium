@@ -50,6 +50,8 @@ plot_signal_timing(yy, EN_test$pred[, 1])
 
 results_1step = model_results
 
+pred_1 = all_preds
+
 #testing for different section of test data cos got oo much positives
 ntest =  120
 d = data
@@ -66,6 +68,8 @@ source("02-predicting 1-step.R")
 
 results_2step = model_results
 
+pred_2 = all_preds
+
 #model for 3 step
 data = data %>% arrange(yyyymm) %>% mutate(ep=lead(ep), yyyymm = lead(yyyymm)) %>% na.omit()
 
@@ -73,6 +77,18 @@ data = data %>% arrange(yyyymm) %>% mutate(ep=lead(ep), yyyymm = lead(yyyymm)) %
 source("02-predicting 1-step.R")
 
 results_3step = model_results
+
+pred_3 = all_preds
+
+preds = pred_1 +pred_2+pred_3
+
+HM = c()
+for (i in 1:13) {
+  HM = c(HM, HM_test(preds[, i], yy))
+}
+
+# HM test for comparison with t+3
+HM
 
 #model for 6 step
 data = data %>% arrange(yyyymm) %>% mutate(ep=lead(ep, 3), yyyymm = lead(yyyymm, 3)) %>% na.omit()
