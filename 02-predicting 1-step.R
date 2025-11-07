@@ -21,16 +21,37 @@ trade_sim_cost <- function(pred, actual, cost = 0.001) {
   cumprod(c(1, returns))
 }
 
-HM_test <- function(predicted, actual) {
+PT_test <- function(predicted, actual) {
+  n <- length(actual)
   threshold = mean(actual)
+  actual_up <- as.numeric(actual >= threshold)
+  pred_up <- as.numeric(predicted >= threshold)
   
-  #dummy
-  predicted_dummy <- as.numeric(predicted >= threshold)
-  actual_dummy <- as.numeric(actual >= threshold) 
+  # Calculate observed proportions
+  P_x <- mean(actual_up)      # Proportion of actual "up"
+  P_y <- mean(pred_up)        # Proportion of predicted "up"
   
-  model <- lm(predicted_dummy ~ 1+actual_dummy)
+  # Calculate observed hit rate
+  correct_direction <- as.numeric(actual_up == pred_up)
+  P_hat <- mean(correct_direction)
   
-  return(summary(model)$coefficients["actual_dummy", "t value"])
+  # Calculate expected hit rate under independence
+  P_star <- P_x * P_y + (1 - P_x) * (1 - P_y)
+  
+  # Create the series Z_t = I_t - P_star
+  # where I_t = 1 if correct direction, 0 otherwise
+  Z_t <- correct_direction - P_star
+    
+  # Fit regression of Z_t on constant (testing if mean differs from 0)
+  model <- lm(Z_t ~ 1)
+  
+  se_hac <- sqrt(NeweyWest(model, lag = floor(n^(1/3))))
+  
+  # Calculate test statistic
+  # We're testing H0: E[Z_t] = 0, i.e., mean(Z_t) = 0
+  test_stat <- mean(Z_t) / se_hac
+  
+  return (test_stat)
 }
 
 # For reference , almost 60% of obs are positive so we are looking to beat that
@@ -44,28 +65,28 @@ squared_loss <- function(pred) {
 }
 
 #historical mean
-rm = cumsum(data$ep)/1:nrow(data)
-rm = tail(rm, ntest)
+hm = cumsum(data$ep)/1:nrow(data)
+hm = tail(rm, ntest)
 
 #Plotting
 plot(yy,type = "l", main = "Actual Vs Historical Mean", xaxt = 'n')
 axis(side = 1, at=c(8, 68, 128, 188, 247), labels = c(2000, 2005, 2010, 2015, 2020))
-lines(rm, col = "red")
+lines(hm, col = "red")
 mean(yy)
 
 all_preds = data.frame(
   actual = yy,
-  rm = rm
+  hm = hm
 )
 
 model_results = data.frame(
   model= "Historic Mean",
-  RMSE=RMSE(rm, yy),
-  dir_acc=dir_acc(rm, yy),
-  return=trade_sim(rm, yy)[ntest+1],
-  return_w_cost=trade_sim_cost(rm, yy)[ntest+1],
-  return_sum = trade_sim_sum(rm, yy)[ntest],
-  HM_test = HM_test(rm, yy)
+  RMSE=RMSE(hm, yy),
+  dir_acc=dir_acc(hm, yy),
+  return=trade_sim(hm, yy)[ntest+1],
+  return_w_cost=trade_sim_cost(hm, yy)[ntest+1],
+  return_sum = trade_sim_sum(hm, yy)[ntest],
+  PT_test = PT_test(hm, yy)
 )
 
 add_results <- function(df, pred, name){
@@ -76,12 +97,12 @@ add_results <- function(df, pred, name){
     return=trade_sim(pred, yy)[ntest+1],
     return_w_cost=trade_sim_cost(pred, yy)[ntest+1],
     return_sum = trade_sim_sum(pred, yy)[ntest],
-    HM_test = HM_test(pred, yy)
+    PT_test = PT_test(pred, yy)
   ))
 }
 
-#squared loss for dm test, we mainly use rm as the benchmark
-squared_loss_df = data.frame(rm = squared_loss(rm))
+#squared loss for dm test, we mainly use hm as the benchmark
+squared_loss_df = data.frame(hm = squared_loss(hm))
 
 
 # Starting of with best subset selection, we select the model with the lowest AIC
@@ -166,7 +187,7 @@ model_results = add_results(model_results, lm_BIC$pred, "Subset Selection - BIC"
 plot(yy,type = "l", main = "Actual Vs Subset Selection  by AIC", xaxt = 'n')
 axis(side = 1, at=c(8, 68, 128, 188, 247), labels = c(2000, 2005, 2010, 2015, 2020))
 lines(sign(lm_AIC$pred)*yy, col = "red")
-lines(sign(rm)*yy, col = "green")
+lines(sign(hm)*yy, col = "green")
 
 source("custom-func-lasso.R")
 

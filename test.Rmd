@@ -82,13 +82,13 @@ pred_3 = all_preds
 
 preds = pred_1 +pred_2+pred_3
 
-HM = c()
+PT = c()
 for (i in 1:13) {
-  HM = c(HM, HM_test(preds[, i], yy))
+  PT = c(PT, PT_test(preds[, i], yy))
 }
 
 # HM test for comparison with t+3
-HM
+PT
 
 #model for 6 step
 data = data %>% arrange(yyyymm) %>% mutate(ep=lead(ep, 3), yyyymm = lead(yyyymm, 3)) %>% na.omit()
