@@ -30,9 +30,9 @@ adf_results <- imap(
   }
 ) %>% bind_rows()
 
-# Looking at the Results, AAA, BAA, lty, tbl all are non stationary, thus we considered tms which is lty-tbl and dfr which is corpr-ltr
+# Looking at the Results, AAA, BAA, lty, tbl all are non stationary, thus we considered tms which is lty-tbl and dfy = AAA-BAA
 adf.test(na.omit(df$tms))
-adf.test(na.omit(df$dfr))
+adf.test(na.omit(df$dfy))
 
 # plotting dp and dy considering the construction we guess high correlation and decide to remove dy to reduce multicollinearity
 dp <- ts(na.omit(df$'d/p'))
@@ -119,6 +119,34 @@ data = data %>% select(-"ygap")
 #eda on ep
 mean_ep = mean(data$ep)
 std_ep = sqrt(var(data$ep))
+
+lag_corr <- imap(
+  train %>% select(-yyyymm, -ep),  # Exclude index and target
+  ~{
+    col_data <- .x
+    y_data <- train$ep
+    
+    # Correlation with y_t and x_t-1
+    corr <- abs(cor(col_data, y_data, use = "complete.obs"))
+    
+    # Correlations with x_{t-2} to x_{t-6}
+    lagged_corrs <- map_dbl(c(1, 2, 5, 11), function(k) {
+      lagged_x <- dplyr::lag(col_data, k)
+      abs(cor(lagged_x, y_data, use = "complete.obs"))
+    })
+    
+    tibble(
+      column_name = .y,
+      correlation_with_y = corr,
+      abs_cor_lag2 = lagged_corrs[1],
+      abs_cor_lag3 = lagged_corrs[2],
+      abs_cor_lag6 = lagged_corrs[3],
+      abs_cor_lag12 = lagged_corrs[4]
+    )
+  }
+) %>% bind_rows()
+
+lag_corr
 
 mean_ep
 std_ep

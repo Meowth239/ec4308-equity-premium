@@ -66,7 +66,7 @@ squared_loss <- function(pred) {
 
 #historical mean
 hm = cumsum(data$ep)/1:nrow(data)
-hm = tail(rm, ntest)
+hm = tail(hm, ntest)
 
 #Plotting
 plot(yy,type = "l", main = "Actual Vs Historical Mean", xaxt = 'n')
@@ -86,7 +86,7 @@ model_results = data.frame(
   return=trade_sim(hm, yy)[ntest+1],
   return_w_cost=trade_sim_cost(hm, yy)[ntest+1],
   return_sum = trade_sim_sum(hm, yy)[ntest],
-  PT_test = PT_test(hm, yy)
+  PT = PT_test(hm, yy)[1]
 )
 
 add_results <- function(df, pred, name){
@@ -97,7 +97,7 @@ add_results <- function(df, pred, name){
     return=trade_sim(pred, yy)[ntest+1],
     return_w_cost=trade_sim_cost(pred, yy)[ntest+1],
     return_sum = trade_sim_sum(pred, yy)[ntest],
-    PT_test = PT_test(pred, yy)
+    PT = PT_test(pred, yy)[1]
   ))
 }
 
@@ -415,6 +415,6 @@ for (i in 1:12) {
   acf(dm$residuals)
   dm_test = c(dm_test, dm$coefficients/sqrt(NeweyWest(dm,lag=6))) #using general rule of thumb of P^1/3 which is roughly 6
 }
-model_results = cbind(model_results, dm_test = c(NA, NA, dm_test))
+model_results = cbind(model_results, dm_test = c(NA, dm_test))
 
 
