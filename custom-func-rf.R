@@ -1,4 +1,4 @@
-# Random Forest Functions - Parallel to LASSO, PCR, and PLS structure
+# Random Forest Functions - Parallel to LASSO, PCR, PLS, and XGBoost structure
 # Tuning on ntree (number of trees) parameter
 
 # Required packages
@@ -49,12 +49,12 @@ runrf <- function(Y, indice, ntree) {
   train_df <- as.data.frame(X_train)
   train_df$Y <- y_train
   
-  # Fit Random Forest model
+  # Fit Random Forest model with importance = TRUE
   # mtry is automatically set to floor(sqrt(p)) for regression
   # nodesize defaults to 5 for regression
   rf_model <- randomForest::randomForest(Y ~ ., data = train_df, 
                                          ntree = ntree,
-                                         importance = FALSE)
+                                         importance = TRUE)
   
   # Create test data frame
   test_df <- as.data.frame(X_test)
@@ -62,11 +62,20 @@ runrf <- function(Y, indice, ntree) {
   # Predict
   pred <- predict(rf_model, newdata = test_df)
   
+  # Extract feature importance (IncNodePurity)
+  raw_importance <- randomForest::importance(rf_model, type = 2)  # type = 2 for IncNodePurity
+  
+  # Normalise importance scores to sum to 1
+  importance_vec <- as.vector(raw_importance)
+  normalised_importance <- importance_vec / sum(importance_vec)
+  names(normalised_importance) <- safe_names
+  
   # Return results
   return(list(
-    "rf_model" = rf_model,           # RF model object
-    "pred" = as.numeric(pred),       # Prediction
-    "ntree_used" = ntree             # Number of trees actually used
+    "rf_model" = rf_model,               # RF model object
+    "pred" = as.numeric(pred),           # Prediction
+    "ntree_used" = ntree,                # Number of trees actually used
+    "importance" = normalised_importance # Normalised feature importance vector
   ))
 }
 
@@ -82,8 +91,11 @@ runrf <- function(Y, indice, ntree) {
 rf.rolling.window <- function(Y, nprev, indice = 1, ntree, date_col = NULL) {
   
   # Initialize storage
+  n_features <- ncol(Y) - 1
   save.pred <- matrix(NA, nprev, 1)
   save.ntree.used <- numeric(nprev)
+  save.importance <- matrix(NA, nprev, n_features)  # Matrix to store importance over time
+  colnames(save.importance) <- paste0("X", 1:n_features)
   
   # Rolling window loop
   for(i in nprev:1) {
@@ -93,6 +105,7 @@ rf.rolling.window <- function(Y, nprev, indice = 1, ntree, date_col = NULL) {
     # Save results
     save.pred[(1 + nprev - i), ] <- rf.model$pred
     save.ntree.used[(1 + nprev - i)] <- rf.model$ntree_used
+    save.importance[(1 + nprev - i), ] <- rf.model$importance
   }
   
   # Get actual values
@@ -139,9 +152,14 @@ rf.rolling.window <- function(Y, nprev, indice = 1, ntree, date_col = NULL) {
   mae <- mean(abs(real_test - save.pred))
   errors <- c("rmse" = rmse, "mae" = mae)
   
+  # Compute average importance across all windows
+  avg_importance <- colMeans(save.importance)
+  
   return(list(
     "pred" = save.pred, 
     "ntree_used" = save.ntree.used,
+    "importance" = save.importance,      # Matrix: [time_periods, features]
+    "avg_importance" = avg_importance,   # Average importance across windows
     "errors" = errors
   ))
 }
@@ -218,7 +236,7 @@ rf.cv.ntree <- function(Y, nprev, indice = 1,
 }
 
 
-#' Example usage and comparison with LASSO, PCR, PLS, and RF:
+#' Example usage and comparison with all methods:
 #' 
 #' # Assuming you have data matrix Y and date column dates
 #' # Make sure to load the randomForest package first: library(randomForest)
@@ -229,6 +247,31 @@ rf.cv.ntree <- function(Y, nprev, indice = 1,
 #' # RF with fixed number of trees
 #' rf_results <- rf.rolling.window(Y, nprev = 24, indice = 1, ntree = 100, date_col = dates)
 #' 
+#' # Access feature importance
+#' # Average importance across all windows
+#' print(rf_results$avg_importance)
+#' 
+#' # Importance matrix over time (each row is a time period)
+#' head(rf_results$importance)
+#' 
+#' # Plot feature importance for most important features
+#' top_features <- order(rf_results$avg_importance, decreasing = TRUE)[1:5]
+#' barplot(rf_results$avg_importance[top_features], 
+#'         names.arg = names(rf_results$avg_importance)[top_features],
+#'         main = "Top 5 Most Important Features (RF)",
+#'         ylab = "Normalised Importance (IncNodePurity)",
+#'         col = "orange")
+#' 
+#' # Track how importance of a specific feature changes over time
+#' feature_to_track <- 1  # Track first feature
+#' plot(rf_results$importance[, feature_to_track], type = "l",
+#'      main = paste("Importance of Feature", feature_to_track, "Over Time (RF)"),
+#'      ylab = "Normalised Importance", xlab = "Time Period",
+#'      col = "orange")
+#' 
+#' # Compare with XGBoost
+#' xgb_cv_results <- xgb.cv.nrounds(Y, nprev = 24, indice = 1, date_col = dates)
+#' 
 #' # Compare with PLS
 #' pls_cv_results <- pls.cv.ncomp(Y, nprev = 24, indice = 1, date_col = dates)
 #' 
@@ -238,16 +281,28 @@ rf.cv.ntree <- function(Y, nprev, indice = 1,
 #' # Compare with LASSO
 #' lasso_cv_results <- lasso.cv.lambda(Y, nprev = 24, indice = 1, date_col = dates)
 #' 
-#' # Compare all four methods
+#' # Compare all five methods
 #' cat("RF RMSE:", rf_cv_results$best_model$errors["rmse"], "\n")
+#' cat("XGBoost RMSE:", xgb_cv_results$best_model$errors["rmse"], "\n")
 #' cat("PLS RMSE:", pls_cv_results$best_model$errors["rmse"], "\n")
 #' cat("PCR RMSE:", pcr_cv_results$best_model$errors["rmse"], "\n")
 #' cat("LASSO RMSE:", lasso_cv_results$best_model$errors["rmse"], "\n")
+#' 
+#' # Compare feature importance between RF and XGBoost
+#' par(mfrow = c(1, 2))
+#' barplot(rf_results$avg_importance, main = "RF Feature Importance",
+#'         ylab = "Normalised Importance", col = "orange")
+#' barplot(xgb_results$avg_importance, main = "XGBoost Feature Importance",
+#'         ylab = "Average Gain", col = "purple")
+#' par(mfrow = c(1, 1))
 #' 
 #' # Expected behaviour:
 #' # - RF is non-parametric and can capture non-linear relationships
 #' # - RF is robust to outliers and doesn't require feature scaling
 #' # - RF may perform better with complex, non-linear data
+#' # - RF feature importance (IncNodePurity) measures total reduction in node impurity
+#' # - XGBoost feature importance (Gain) measures average gain across all splits
+#' # - Both importance measures are now normalised for easier comparison
 #' # - LASSO provides sparse, interpretable solutions
 #' # - PLS/PCR provide linear dimension reduction
-#' # - RF typically takes longer to train than linear methods
+#' # - RF typically takes longer to train than linear methods but faster than heavily-tuned XGBoost</document_content></document>

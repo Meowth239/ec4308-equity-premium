@@ -356,6 +356,7 @@ model_results = add_results(model_results, pls_test$pred, "PLS")
 # RF takes a long time
 rf_data = model.matrix(ep~.-yyyymm, data = data)[, 2:20] # Dont need to scale
 rf_cv_data = rf_data[1:(nrow(rf_data)-ntest), ]
+
 source("custom-func-rf.R")
 
 rf_cv <- rf.cv.ntree(lasso_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])

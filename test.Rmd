@@ -45,7 +45,7 @@ plot_signal_timing(yy, lm_AIC$pred[, 1])
 plot_signal_timing(yy, lasso_test$pred[, 1])
 plot_signal_timing(yy, EN_test$pred[, 1])
 
-<!-- dev.off() -->
+dev.off()
 
 
 results_1step = model_results
