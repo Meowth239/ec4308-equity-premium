@@ -60,7 +60,7 @@ source("02-predicting 1-step.R")
 
 results_1step_alt = model_results
 #model for 2 step
-data = data %>% arrange(yyyymm) %>% mutate(ep=lead(ep), yyyymm = lead(yyyymm)) %>% na.omit()
+data = d %>% arrange(yyyymm) %>% mutate(ep=lead(ep), yyyymm = lead(yyyymm)) %>% na.omit()
 
 #make sure to check for AIC and BIC for subset selection to see if the iterative process is the same
 ntest = 247
