@@ -200,7 +200,6 @@ lasso_cv_data = lasso_data[1:(nrow(lasso_data)-ntest), ]
 #of the 495 take the last half so 247 for CV
 lasso_CV = lasso.cv.lambda(lasso_cv_data, ntest, indice = 1, alpha = alpha, 
                            lambda_grid = 10^seq(-6, 1, length.out = 50), date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
-#We use RMSE as main metric in determining for CV and from the graph can see that best lambda is 0.01930698
 
 #prediction
 lasso_test = lasso.rolling.window(lasso_data, ntest, indice = 1, lasso_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
@@ -241,7 +240,6 @@ alpha = 0
 #of the 495 take the last half so 247 for CV
 ridge_CV = lasso.cv.lambda(lasso_cv_data, ntest, indice = 1, alpha = alpha, #just change this can alrdy
                            lambda_grid = 10^seq(-6, 1, length.out = 50), date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
-#We use RMSE as main metric in determining for CV and from the graph can see that best lambda is 0.01930698
 
 #prediction
 ridge_test = lasso.rolling.window(lasso_data, ntest, indice = 1, ridge_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
@@ -260,7 +258,6 @@ alpha = 0.5
 #of the 495 take the last half so 247 for CV
 EN_CV = lasso.cv.lambda(lasso_cv_data, ntest, indice = 1, alpha = alpha, #just change this can alrdy
                            lambda_grid = 10^seq(-6, 1, length.out = 50), date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
-#We use RMSE as main metric in determining for CV and from the graph can see that best lambda is 0.01930698
 
 #prediction
 EN_test = lasso.rolling.window(lasso_data, ntest, indice = 1, EN_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
@@ -322,8 +319,6 @@ source("custom-func-pcr.R")
 #of the 495 take the last half so 247 for CV
 pcr_cv <- pcr.cv.ncomp(lasso_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
 
-#We use RMSE as main metric in determining for CV and from the graph can see that best lambda is 0.01930698
-
 #prediction
 pcr_test <- pcr.rolling.window(lasso_data, nprev = ntest, indice = 1, ncomp = pcr_cv$best_ncomp, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
@@ -375,9 +370,9 @@ all_preds = cbind(all_preds, pls_test$pred)
 squared_loss_df = cbind(squared_loss_df, squared_loss(pls_test$pred))
 model_results = add_results(model_results, pls_test$pred, "PLS")
 
-# RF takes a long time
-rf_data = model.matrix(ep~.-yyyymm, data = data)[, 2:20] # Dont need to scale
-rf_cv_data = rf_data[1:(nrow(rf_data)-ntest), ]
+# # RF takes a long time
+# rf_data = model.matrix(ep~.-yyyymm, data = data)[, 2:20] # Dont need to scale
+# rf_cv_data = rf_data[1:(nrow(rf_data)-ntest), ]
 
 source("custom-func-rf.R")
 
@@ -416,10 +411,10 @@ model_results = add_results(model_results, xgb_test$pred, "XGB")
 # hybrid learning, completely experimental
 source("custom-func-hybrid.R")
 set.seed(4308)
-hybrid_cv_results <- hybrid.cv.params(rf_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
+hybrid_cv_results <- hybrid.cv.params(lasso_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
 
 set.seed(4308)
-hybrid_test = hybrid.rolling.window(rf_data, nprev = ntest, indice = 1, lambda = hybrid_cv_results$best_lambda, 
+hybrid_test = hybrid.rolling.window(lasso_data, nprev = ntest, indice = 1, lambda = hybrid_cv_results$best_lambda, 
                                     nrounds = hybrid_cv_results$best_nrounds,, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
 all_preds = cbind(all_preds, hybrid_test$pred)
