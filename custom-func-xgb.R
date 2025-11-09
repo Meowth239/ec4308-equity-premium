@@ -53,7 +53,7 @@ runxgb <- function(Y, indice, nrounds) {
     objective = "reg:squarederror",  # Regression with squared error
     max_depth = 6,                   # Maximum tree depth (default)
     eta = 0.3,                       # Learning rate (default)
-    subsample = 1,                   # Use all rows
+    subsample = .8,                   # Use 80% rows
     colsample_bytree = 1             # Use all columns
   )
   

@@ -54,7 +54,6 @@ PT_test <- function(predicted, actual) {
   return (test_stat)
 }
 
-# For reference , almost 60% of obs are positive so we are looking to beat that
 yy = data$ep[(nrow(data)-ntest+1):nrow(data)]
 yy_sign = mean(sign(yy)>0)
 yy_sign = max(c(yy_sign, 1-yy_sign))
@@ -152,15 +151,15 @@ k1aic = which.min(AIC1)
 
 test.mat = model.matrix(ep~.-yyyymm, data = data)
 
-temp.coef = names(coef(bssel, id = k1bic))
+temp.coef = names(coef(bssel, id = k1bic))[2:k1bic]
 print("Variables chosen by BIC")
 temp.coef
-lm_BIC_data = test.mat[, temp.coef]
+lm_BIC_data = scale(test.mat[, temp.coef])
 
-temp.coef = names(coef(bssel, id = k1aic))
+temp.coef = names(coef(bssel, id = k1aic))[2:k1aic]
 print("Variables chosen by AIC")
 temp.coef
-lm_AIC_data = test.mat[, temp.coef]
+lm_AIC_data = scale(test.mat[, temp.coef])
 
 lm_AIC_data = cbind(data$ep, lm_AIC_data)
 lm_BIC_data = cbind(data$ep, lm_BIC_data)
@@ -173,8 +172,8 @@ lm_AIC = lm.rolling.window(lm_AIC_data, ntest, 1)
 lm_BIC = lm.rolling.window(lm_BIC_data, ntest, 1)
 
 #coefficients
-lm_AIC$coef
-lm_BIC$coef
+summary(lm_AIC$coef)
+summary(lm_BIC$coef)
 
 all_preds = cbind(all_preds, lm_AIC$pred)
 all_preds = cbind(all_preds, lm_BIC$pred)
@@ -264,10 +263,33 @@ EN_CV = lasso.cv.lambda(lasso_cv_data, ntest, indice = 1, alpha = alpha, #just c
 #We use RMSE as main metric in determining for CV and from the graph can see that best lambda is 0.01930698
 
 #prediction
-EN_test = lasso.rolling.window(lasso_data, ntest, indice = 1, ridge_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
+EN_test = lasso.rolling.window(lasso_data, ntest, indice = 1, EN_CV$best_lambda, alpha = alpha, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 
 #EN coef
 EN_test$coef
+
+EN_test$observation <- 1:nrow(EN_test$coef)
+
+# Reshape data to long format for ggplot2
+df_long <- melt(EN_test$coef, id.vars = "observation", 
+                variable.name = "variable", 
+                value.name = "coefficient")
+
+# Calculate symmetric limits around zero
+max_abs <- max(abs(df_long$coefficient), na.rm = TRUE)
+limits <- c(-max_abs, max_abs)
+
+# Create heatmap
+ggplot(df_long, aes(x = Var1, y = Var2, fill = coefficient)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", mid = "grey", high = "red", 
+                       midpoint = 0, limits = limits,
+                       name = "Coefficient") +
+  theme_minimal() +
+  labs(x = "Observation", y = "Variable", 
+       title = "Lasso Coefficients Across Rolling Windows") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
 
 all_preds = cbind(all_preds, EN_test$pred)
 squared_loss_df = cbind(squared_loss_df, squared_loss(EN_test$pred))
@@ -359,10 +381,14 @@ rf_cv_data = rf_data[1:(nrow(rf_data)-ntest), ]
 
 source("custom-func-rf.R")
 
+set.seed(4308)
 rf_cv <- rf.cv.ntree(lasso_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
 
 #prediction
+set.seed(4308)
 rf_test = rf.rolling.window(lasso_data, nprev = ntest, indice = 1, ntree = rf_cv$best_ntree, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
+
+rf_test$avg_importance
 
 all_preds = cbind(all_preds, rf_test$pred)
 squared_loss_df = cbind(squared_loss_df, squared_loss(rf_test$pred))
@@ -372,10 +398,14 @@ model_results = add_results(model_results, rf_test$pred, "RF")
 # XGB
 source("custom-func-xgb.R")
 
+set.seed(4308)
 xgb_cv <- xgb.cv.nrounds(lasso_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
 
 #prediction
+set.seed(4308)
 xgb_test = xgb.rolling.window(lasso_data, nprev = ntest, indice = 1, nrounds = xgb_cv$best_nrounds, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
+
+xgb_test$avg_importance
 
 all_preds = cbind(all_preds, xgb_test$pred)
 squared_loss_df = cbind(squared_loss_df, squared_loss(xgb_test$pred))
@@ -385,8 +415,10 @@ model_results = add_results(model_results, xgb_test$pred, "XGB")
 
 # hybrid learning, completely experimental
 source("custom-func-hybrid.R")
+set.seed(4308)
 hybrid_cv_results <- hybrid.cv.params(rf_cv_data, nprev = ntest, indice = 1, date_col = data$yyyymm[(nrow(data)-ntest*2):(nrow(data)-ntest)])
 
+set.seed(4308)
 hybrid_test = hybrid.rolling.window(rf_data, nprev = ntest, indice = 1, lambda = hybrid_cv_results$best_lambda, 
                                     nrounds = hybrid_cv_results$best_nrounds,, date_col = data$yyyymm[(nrow(data)-ntest):nrow(data)])
 

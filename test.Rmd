@@ -82,6 +82,8 @@ pred_3 = all_preds
 
 preds = pred_1 +pred_2+pred_3
 
+preds = preds/3
+
 PT = c()
 for (i in 1:13) {
   PT = c(PT, PT_test(preds[, i], yy))
