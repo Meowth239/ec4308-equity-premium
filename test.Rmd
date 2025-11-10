@@ -56,7 +56,8 @@ pred_1 = all_preds
 ntest =  120
 d = data
 data = data[1:(nrow(data)-247),, ]
-source("02-predicting 1-step.R")
+source("02-predicting 1-step.R") 
+#if you encounter an error here please just run it again
 
 results_1step_alt = model_results
 #model for 2 step

@@ -151,12 +151,14 @@ k1aic = which.min(AIC1)
 
 test.mat = model.matrix(ep~.-yyyymm, data = data)
 
-temp.coef = names(coef(bssel, id = k1bic))[2:k1bic]
+temp.coef = names(coef(bssel, id = k1bic))
+temp.coef = temp.coef[temp.coef!="(Intercept)"]
 print("Variables chosen by BIC")
 temp.coef
 lm_BIC_data = scale(test.mat[, temp.coef])
 
-temp.coef = names(coef(bssel, id = k1aic))[2:k1aic]
+temp.coef = names(coef(bssel, id = k1aic))
+temp.coef = temp.coef[temp.coef!="(Intercept)"]
 print("Variables chosen by AIC")
 temp.coef
 lm_AIC_data = scale(test.mat[, temp.coef])
